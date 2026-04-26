@@ -1,0 +1,6 @@
+﻿Analyzing tcp_file_share...                                     
+
+warning - Unused import: 'package:flutter/foundation.dart' - lib\models\device_info.dart:2:8 - unused_import
+   info - The import of 'package:flutter/foundation.dart' is unnecessary because all of the used elements are also provided by the import of 'package:flutter/material.dart' - lib\screens\splash_screen.dart:2:8 - unnecessary_import
+  error - The method 'connect' isn't defined for the type 'RawDatagramSocket' - lib\screens\splash_screen.dart:462:12 - undefined_method
+
