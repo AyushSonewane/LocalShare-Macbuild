@@ -36,12 +36,19 @@ class FileSource {
   ///
   /// Uses [streamFactory] if available, otherwise falls back to
   /// `File(path).openRead()`.
+  ///
+  /// **Performance note:** We avoid `Uint8List.fromList()` copies in the hot
+  /// path. Both `File.openRead()` and `UriContent.getContentStream()` already
+  /// emit `Uint8List` chunks, so a cast is sufficient in the common case.
   Stream<Uint8List> openRead() {
     if (streamFactory != null) {
-      return streamFactory!().map((chunk) => Uint8List.fromList(chunk));
+      return streamFactory!().map((chunk) =>
+          chunk is Uint8List ? chunk : Uint8List.fromList(chunk));
     }
     if (path != null) {
-      return File(path!).openRead().map((chunk) => Uint8List.fromList(chunk));
+      // File.openRead() returns Stream<List<int>> but the runtime type is
+      // always Uint8List — use cast() to avoid per-chunk allocation.
+      return File(path!).openRead().cast<Uint8List>();
     }
     throw StateError('FileSource has neither streamFactory nor path');
   }

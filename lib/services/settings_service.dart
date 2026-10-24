@@ -110,9 +110,22 @@ class SettingsService extends ChangeNotifier {
         if (ext != null) return ext;
       }
     }
+    // Default on Windows: C:\Users\<username>\Downloads\LocalShare
+    if (Platform.isWindows) {
+      try {
+        final home = Platform.environment['USERPROFILE'] ?? Platform.environment['HOMEPATH'] ?? '';
+        if (home.isNotEmpty) {
+          final dl = Directory('$home\\Downloads\\LocalShare');
+          if (!await dl.exists()) await dl.create(recursive: true);
+          return dl;
+        }
+      } catch (_) {
+        // Fall through to documents directory.
+      }
+    }
     final docs = await getApplicationDocumentsDirectory();
     final dir = Directory(
-        '${docs.path}${Platform.pathSeparator}TCPFileShare${Platform.pathSeparator}received');
+        '${docs.path}${Platform.pathSeparator}LocalShare${Platform.pathSeparator}received');
     if (!await dir.exists()) await dir.create(recursive: true);
     return dir;
   }

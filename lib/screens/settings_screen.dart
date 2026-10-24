@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
 import '../services/settings_service.dart';
@@ -292,16 +293,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                   const SizedBox(height: 10),
 
-                  // IP + Port row
+                  // IP + Port row (only your own — never shown to others)
                   Row(
                     children: [
                       Expanded(
-                        child: _InfoBox(label: 'IP:', value: widget.selfIp),
+                        child: _InfoBox(label: 'Your IP', value: widget.selfIp),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child:
-                            _InfoBox(label: 'Port:', value: '$kTransferPort'),
+                            _InfoBox(label: 'Port', value: '$kTransferPort'),
                       ),
                     ],
                   ),
@@ -366,6 +367,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ),
                     ),
                   ],
+
+                  const SizedBox(height: 30),
+
+                  // ── About ──────────────────────────────────────────────
+                  _SectionTitle('About'),
+                  const SizedBox(height: 12),
+                  const _AboutSection(),
 
                   const SizedBox(height: 32),
                 ],
@@ -695,4 +703,297 @@ class _FolderOption {
     required this.icon,
     required this.path,
   });
+}
+
+// ── About section ────────────────────────────────────────────────────────────
+
+Future<void> _launchUrl(String url) async {
+  final uri = Uri.parse(url);
+  if (await canLaunchUrl(uri)) {
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+}
+
+class _AboutSection extends StatelessWidget {
+  const _AboutSection();
+
+  static const _version = '1.0.1.0';
+  static const _websiteUrl = 'https://www.localshare.co.in';
+  static const _privacyUrl = 'https://www.localshare.co.in/privacy.html';
+
+  static const _desc =
+      'Fast, offline LAN file sharing for Android & Windows. '
+      'No internet. No cloud. No accounts.';
+
+  @override
+  Widget build(BuildContext context) {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    final secondary = AppTheme.secondaryOf(context);
+    final muted = AppTheme.mutedOf(context);
+    final border = AppTheme.borderOf(context);
+    final surface = AppTheme.surfaceOf(context);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
+      decoration: BoxDecoration(
+        color: surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: border),
+      ),
+      child: Column(
+        children: [
+          // ── Logo ──
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFFF8C00).withValues(alpha: 0.30),
+                  blurRadius: 20,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: Image.asset(
+                'assets/images/logo orange.png',
+                fit: BoxFit.cover,
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // ── App name ──
+          Text(
+            'LocalShare',
+            style: TextStyle(
+              color: onSurface,
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.3,
+            ),
+          ),
+
+          const SizedBox(height: 6),
+
+          // ── Version badge ──
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+            decoration: BoxDecoration(
+              color: AppTheme.accentPrimary.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                  color: AppTheme.accentPrimary.withValues(alpha: 0.30)),
+            ),
+            child: Text(
+              'Version $_version',
+              style: const TextStyle(
+                color: AppTheme.accentPrimary,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.5,
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // ── Divider ──
+          Divider(color: border, height: 1),
+
+          const SizedBox(height: 20),
+
+          // ── Description ──
+          Text(
+            _desc,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: secondary,
+              fontSize: 13,
+              height: 1.6,
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // ── Tech pills row ──
+          Wrap(
+            alignment: WrapAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _TechPill(
+                  icon: Icons.wifi_rounded,
+                  label: 'TCP + UDP',
+                  color: AppTheme.accentSecondary),
+              _TechPill(
+                  icon: Icons.lock_open_rounded,
+                  label: 'LAN Only',
+                  color: AppTheme.success),
+              _TechPill(
+                  icon: Icons.bolt_rounded,
+                  label: 'Zero Cache',
+                  color: const Color(0xFFFF8C00)),
+            ],
+          ),
+
+          const SizedBox(height: 20),
+
+          // ── Website banner ──
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  AppTheme.accentPrimary.withValues(alpha: 0.10),
+                  AppTheme.accentSecondary.withValues(alpha: 0.06),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                  color: AppTheme.accentPrimary.withValues(alpha: 0.25)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.language_rounded,
+                    size: 16, color: AppTheme.accentPrimary),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Download for Windows and others',
+                        style: TextStyle(
+                          color: AppTheme.accentPrimary,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'localshare.co.in',
+                        style: TextStyle(
+                          color: AppTheme.accentPrimary.withValues(alpha: 0.65),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w400,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () => _launchUrl(_websiteUrl),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accentPrimary,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Text(
+                      'Visit',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // ── Footer ──
+          Divider(color: border, height: 1),
+          const SizedBox(height: 14),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text('Made with ', style: TextStyle(color: muted, fontSize: 12)),
+              const Icon(Icons.favorite_rounded, size: 13, color: Color(0xFFE53935)),
+              Text(' in India  •  © 2026 LocalShare',
+                  style: TextStyle(color: muted, fontSize: 12)),
+            ],
+          ),
+          const SizedBox(height: 10),
+          // ── Links row ──
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              GestureDetector(
+                onTap: () => _launchUrl(_websiteUrl),
+                child: Text(
+                  'Website',
+                  style: TextStyle(
+                    color: AppTheme.accentSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    decoration: TextDecoration.underline,
+                    decorationColor: AppTheme.accentSecondary,
+                  ),
+                ),
+              ),
+              Text('  •  ', style: TextStyle(color: muted, fontSize: 12)),
+              GestureDetector(
+                onTap: () => _launchUrl(_privacyUrl),
+                child: Text(
+                  'Privacy Policy',
+                  style: TextStyle(
+                    color: AppTheme.accentSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    decoration: TextDecoration.underline,
+                    decorationColor: AppTheme.accentSecondary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TechPill extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  const _TechPill(
+      {required this.icon, required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withValues(alpha: 0.30)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 5),
+          Text(label,
+              style: TextStyle(
+                  color: color, fontSize: 12, fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
 }

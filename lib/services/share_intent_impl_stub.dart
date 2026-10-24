@@ -1,11 +1,12 @@
-// Stub implementation for platforms that don't support receive_sharing_intent
-// (Windows, macOS, Linux, Web).
-typedef SharedFilesCallback = void Function(List<String> paths);
+// Stub for platforms that don't support share intents (Windows, macOS, Linux).
+import '../models/file_source.dart';
+
+typedef SharedFilesCallback = void Function(List<FileSource> sources);
 
 void initializeShareIntent({required SharedFilesCallback onFiles}) {
-  // No-op on non-mobile platforms
+  // No-op on non-mobile platforms.
 }
 
 void disposeShareIntent() {
-  // No-op on non-mobile platforms
+  // No-op on non-mobile platforms.
 }

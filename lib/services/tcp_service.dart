@@ -279,8 +279,13 @@ Future<void> writeTransferHeader({
     }
     await socket.flush();
 
-    // Wait for the receiver to confirm all files written (up to 90s).
-    await doneCompleter.future.timeout(const Duration(seconds: 90));
+    // Wait for the receiver to confirm all files written.
+    // Timeout is adaptive: min 90s, +1s per MB, capped at 30 min.
+    // This prevents false failures on large files over slow WiFi.
+    final totalBytes = files.fold<int>(0, (s, f) => s + f.size);
+    final totalMb = totalBytes ~/ (1024 * 1024);
+    final timeoutSecs = (90 + totalMb).clamp(90, 1800);
+    await doneCompleter.future.timeout(Duration(seconds: timeoutSecs));
   } finally {
     await sub.cancel();
   }

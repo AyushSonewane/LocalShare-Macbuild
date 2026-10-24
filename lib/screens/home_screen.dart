@@ -1,9 +1,12 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:cross_file/cross_file.dart';
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
-import 'package:open_filex/open_filex.dart';
+import 'package:lottie/lottie.dart';
 import 'package:provider/provider.dart';
 import '../models/device_info.dart';
+import '../models/file_source.dart';
 import '../models/incoming_request.dart';
 import '../models/transfer_item.dart';
 import '../services/file_transfer_service.dart';
@@ -11,7 +14,9 @@ import '../services/discovery_service.dart';
 import '../services/share_intent_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_routes.dart';
+import '../utils/device_code.dart';
 import '../widgets/transfer_card.dart';
+import '../widgets/drag_drop_overlay.dart';
 import 'receive_screen.dart';
 import 'send_screen.dart'; // also exports deviceIcon()
 import 'settings_screen.dart';
@@ -29,8 +34,25 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isRefreshing = false;
   StreamSubscription<IncomingRequest>? _requestSub;
 
-  /// File paths shared via OS share sheet, waiting to be attached to a send.
-  List<String> _sharedFilePaths = [];
+  /// Files shared via OS share sheet, already converted to [FileSource]s
+  /// (content URI streams — zero cache copy on Android).
+  List<FileSource> _sharedFileSources = [];
+
+  /// Files dropped globally onto the app window (Windows/desktop).
+  /// Stored as [FileSource] so they go directly into the transfer pipeline.
+  List<FileSource> _pendingDropFiles = [];
+
+  /// True while the user is hovering a drag over the window.
+  bool _isDragHovering = false;
+
+  /// Number of files being dragged (for overlay preview).
+  int _dragFileCount = 0;
+
+  /// First file name being dragged (for overlay preview).
+  String? _dragFirstFileName;
+
+  /// True while dropped folders are being recursively indexed.
+  bool _isIndexingDrop = false;
 
   late final PageController _pageController;
 
@@ -59,11 +81,11 @@ class _HomeScreenState extends State<HomeScreen> {
     final shareService = context.read<ShareIntentService>();
     if (!shareService.hasPendingFiles) return;
 
-    final paths = shareService.consumePendingFiles();
-    if (paths.isEmpty) return;
+    final sources = shareService.consumePendingFileSources();
+    if (sources.isEmpty) return;
 
     setState(() {
-      _sharedFilePaths = paths;
+      _sharedFileSources = sources;
     });
     // Auto-switch to Send tab so the user can pick a device.
     _switchTab(1);
@@ -122,16 +144,130 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _tab = i;
     });
-
-    // Animate page view
     _pageController.animateToPage(
       i,
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeOutCubic,
     );
-
-    // Broadcast current mode to nearby devices
     context.read<DiscoveryService>().setReceivingMode(i == 0);
+  }
+
+  // ── Global drag-and-drop (Windows/desktop) ─────────────────────────────────
+
+  /// Entry point for files dropped anywhere on the app window.
+  ///
+  /// Guards:
+  /// - Active send in progress → show snackbar, ignore drop
+  /// - Active receive in progress → warn user, ignore drop
+  /// - Otherwise: scan files/folders async, switch to Send tab, show banner
+  Future<void> _onGlobalDrop(DropDoneDetails details) async {
+    setState(() => _isDragHovering = false);
+
+    if (details.files.isEmpty) return;
+
+    final ts = context.read<FileTransferService>();
+
+    // Guard: active send in progress
+    if (ts.isSending) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('A send is already in progress. Cancel it first.'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Guard: active receive in progress
+    final hasActiveReceive = ts.transfers.any((t) =>
+        t.direction == TransferDirection.receiving &&
+        (t.status == TransferStatus.inProgress ||
+            t.status == TransferStatus.pending));
+    if (hasActiveReceive) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('A file is being received. Wait for it to complete.'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Start async indexing — show spinner in the banner
+    setState(() => _isIndexingDrop = true);
+
+    // Switch to Send tab immediately so user sees the device list
+    _switchTab(1);
+
+    // Scan files/folders on a background isolate to avoid UI freeze
+    final newSources = await _indexDroppedItems(details.files);
+
+    if (!mounted) return;
+
+    if (newSources.isEmpty) {
+      setState(() => _isIndexingDrop = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('No files found in the dropped items.'),
+            duration: Duration(seconds: 2)),
+      );
+      return;
+    }
+
+    setState(() {
+      // Merge with any existing pending drops, deduplicating by path
+      final existing = {for (final f in _pendingDropFiles) f.path};
+      final deduped =
+          newSources.where((s) => !existing.contains(s.path)).toList();
+      _pendingDropFiles = [..._pendingDropFiles, ...deduped];
+      _isIndexingDrop = false;
+    });
+  }
+
+  /// Recursively indexes dropped XFiles into [FileSource] list.
+  /// Runs synchronously but called after a frame so UI stays responsive.
+  static Future<List<FileSource>> _indexDroppedItems(
+      List<XFile> xfiles) async {
+    final result = <FileSource>[];
+    for (final xf in xfiles) {
+      final f = File(xf.path);
+      FileStat stat;
+      try {
+        stat = f.statSync();
+      } catch (_) {
+        continue;
+      }
+      if (stat.type == FileSystemEntityType.directory) {
+        result.addAll(_scanDir(Directory(xf.path)));
+      } else if (stat.type == FileSystemEntityType.file) {
+        result.add(FileSource(
+          name: xf.name,
+          size: stat.size,
+          path: xf.path,
+        ));
+      }
+    }
+    return result;
+  }
+
+  static List<FileSource> _scanDir(Directory dir) {
+    final result = <FileSource>[];
+    try {
+      for (final e in dir.listSync(recursive: true, followLinks: false)) {
+        if (e is File) {
+          result.add(FileSource(
+            name: e.path.split(Platform.pathSeparator).last,
+            size: e.lengthSync(),
+            path: e.path,
+          ));
+        }
+      }
+    } catch (_) {}
+    return result;
   }
 
   void _onPageChanged(int index) {
@@ -156,66 +292,105 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final transferService = context.watch<FileTransferService>();
     final discoveryService = context.watch<DiscoveryService>();
-    // Only show peers that are actively on the Receive tab
-    final peers = discoveryService.peers.where((p) => p.isReceiving).toList();
+    // Issue 1 fix: double-guard to exclude self by both ID and IP,
+    // preventing the self-send glitch when _self is null during startup.
+    final selfId = widget.selfDevice.id;
+    final selfIp = widget.selfDevice.ip;
+    final peers = discoveryService.peers
+        .where((p) =>
+            p.isReceiving && p.id != selfId && p.ip != selfIp)
+        .toList();
+    final isDesktop =
+        Platform.isWindows || Platform.isMacOS || Platform.isLinux;
 
-    return Scaffold(
+    Widget scaffold = Scaffold(
       backgroundColor: AppTheme.bgOf(context),
       body: SafeArea(
-        child: Column(
+        child: Stack(
           children: [
-            // ── Header ──────────────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 20, 20, 0),
-              child: Row(
-                children: [
-                  Text(
-                    'LocalShare',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurface,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: -0.5,
-                    ),
+            Column(
+              children: [
+                // ── Header ──────────────────────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 20, 20, 0),
+                  child: Row(
+                    children: [
+                      Text(
+                        'LocalShare',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurface,
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        onPressed: () => AppRoutes.push(
+                            context,
+                            SettingsScreen(
+                                selfIp: widget.selfDevice.ip,
+                                selfName: widget.selfDevice.name)),
+                        icon: Icon(Icons.settings_outlined,
+                            color: AppTheme.secondaryOf(context), size: 22),
+                        tooltip: 'Settings',
+                      ),
+                    ],
                   ),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: () => AppRoutes.push(
-                        context,
-                        SettingsScreen(
-                            selfIp: widget.selfDevice.ip,
-                            selfName: widget.selfDevice.name)),
-                    icon: Icon(Icons.settings_outlined,
-                        color: AppTheme.secondaryOf(context), size: 22),
-                    tooltip: 'Settings',
+                ),
+                // ── Main content ─────────────────────────────────────────
+                Expanded(
+                  child: PageView(
+                    controller: _pageController,
+                    onPageChanged: _onPageChanged,
+                    physics: const ClampingScrollPhysics(),
+                    children: [
+                      _buildReceiveTab(context, transferService),
+                      _buildSendTab(context, peers, transferService),
+                    ],
                   ),
-                ],
-              ),
+                ),
+                // ── Bottom pill bar ──────────────────────────────────────
+                _BottomPillBar(selected: _tab, onTap: _switchTab),
+                const SizedBox(height: 24),
+              ],
             ),
 
-            // ── Main content ─────────────────────────────────────────────
-            Expanded(
-              child: PageView(
-                controller: _pageController,
-                onPageChanged: _onPageChanged,
-                physics: const ClampingScrollPhysics(),
-                children: [
-                  _buildReceiveTab(context, transferService),
-                  _buildSendTab(context, peers, transferService),
-                ],
+            // ── Global drag-hover overlay (premium) ───────────────────
+            AnimatedOpacity(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOut,
+              opacity: _isDragHovering ? 1.0 : 0.0,
+              child: IgnorePointer(
+                ignoring: !_isDragHovering,
+                child: DragDropOverlay(
+                  isHovering: _isDragHovering,
+                  fileCount: _dragFileCount,
+                  firstFileName: _dragFirstFileName,
+                ),
               ),
             ),
-
-            // ── Bottom pill bar ───────────────────────────────────────────
-            _BottomPillBar(
-              selected: _tab,
-              onTap: _switchTab,
-            ),
-            const SizedBox(height: 24),
           ],
         ),
       ),
     );
+
+    // Wrap entire window in DropTarget on desktop only
+    if (isDesktop) {
+      return DropTarget(
+        onDragDone: _onGlobalDrop,
+        onDragEntered: (_) => setState(() {
+          _isDragHovering = true;
+        }),
+        onDragExited: (_) => setState(() {
+          _isDragHovering = false;
+          _dragFileCount = 0;
+          _dragFirstFileName = null;
+        }),
+        child: scaffold,
+      );
+    }
+    return scaffold;
   }
 
   // ── Receive tab ───────────────────────────────────────────────────────────
@@ -241,6 +416,42 @@ class _HomeScreenState extends State<HomeScreen> {
               Text('Incoming Files',
                   style: Theme.of(context).textTheme.titleMedium),
               const Spacer(),
+              // Device code badge — sender can identify this device by #XXX
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    'Your code',
+                    style: TextStyle(
+                      color: AppTheme.mutedOf(context),
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accentPrimary.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                          color:
+                              AppTheme.accentPrimary.withValues(alpha: 0.30)),
+                    ),
+                    child: Text(
+                      deviceCode(widget.selfDevice.ip),
+                      style: const TextStyle(
+                        color: AppTheme.accentPrimary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        fontFamily: 'monospace',
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
@@ -276,8 +487,10 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         const SizedBox(height: 20),
 
-        // ── Shared-files banner ──────────────────────────────────────────
-        if (_sharedFilePaths.isNotEmpty) ...[
+        // ── Pending files banner (share intent OR global drag-drop) ─────
+        if (_sharedFileSources.isNotEmpty ||
+            _pendingDropFiles.isNotEmpty ||
+            _isIndexingDrop) ...[
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
             child: Container(
@@ -290,12 +503,22 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.attach_file_rounded,
-                      size: 18, color: AppTheme.accentPrimary),
+                  if (_isIndexingDrop)
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: AppTheme.accentPrimary),
+                    )
+                  else
+                    const Icon(Icons.attach_file_rounded,
+                        size: 18, color: AppTheme.accentPrimary),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      '${_sharedFilePaths.length} file${_sharedFilePaths.length > 1 ? 's' : ''} ready to send — pick a device below',
+                      _isIndexingDrop
+                          ? 'Scanning dropped files…'
+                          : _bannerText,
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.onSurface,
                         fontSize: 12,
@@ -303,11 +526,15 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ),
-                  GestureDetector(
-                    onTap: () => setState(() => _sharedFilePaths = []),
-                    child: Icon(Icons.close_rounded,
-                        size: 16, color: AppTheme.mutedOf(context)),
-                  ),
+                  if (!_isIndexingDrop)
+                    GestureDetector(
+                      onTap: () => setState(() {
+                        _sharedFileSources = [];
+                        _pendingDropFiles = [];
+                      }),
+                      child: Icon(Icons.close_rounded,
+                          size: 16, color: AppTheme.mutedOf(context)),
+                    ),
                 ],
               ),
             ),
@@ -365,7 +592,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       padding: const EdgeInsets.only(bottom: 8),
                       child: _DeviceTile(
                         name: peer.name,
-                        ip: peer.ip,
+                        code: deviceCode(peer.ip),
                         platform: peer.platform,
                         onTap: () =>
                             _navigateToSend(ctx, peer, transferService),
@@ -385,12 +612,33 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) setState(() => _isRefreshing = false);
   }
 
+  /// Banner text summarizing pending files from both share intents and drops.
+  String get _bannerText {
+    final total = _sharedFileSources.length + _pendingDropFiles.length;
+    if (total == 0) return '';
+    final sources = <String>[];
+    if (_sharedFileSources.isNotEmpty) {
+      sources.add(
+          '${_sharedFileSources.length} shared file${_sharedFileSources.length > 1 ? 's' : ''}');
+    }
+    if (_pendingDropFiles.isNotEmpty) {
+      sources.add(
+          '${_pendingDropFiles.length} dropped file${_pendingDropFiles.length > 1 ? 's' : ''}');
+    }
+    return '${sources.join(' + ')} ready — tap a device to send';
+  }
+
   void _navigateToSend(
       BuildContext context, DeviceInfo target, FileTransferService ts) {
-    // If we have files from a share intent, attach them and clear.
-    final sharedPaths = List<String>.from(_sharedFilePaths);
-    if (_sharedFilePaths.isNotEmpty) {
-      setState(() => _sharedFilePaths = []);
+    // Merge share-intent FileSources and drag-dropped FileSources.
+    final sharedSources = List<FileSource>.from(_sharedFileSources);
+    final droppedSources = List<FileSource>.from(_pendingDropFiles);
+
+    if (_sharedFileSources.isNotEmpty || _pendingDropFiles.isNotEmpty) {
+      setState(() {
+        _sharedFileSources = [];
+        _pendingDropFiles = [];
+      });
     }
 
     AppRoutes.push(
@@ -398,22 +646,13 @@ class _HomeScreenState extends State<HomeScreen> {
       SendScreen(
         target: target,
         transferService: ts,
-        initialFilePaths: sharedPaths,
+        // Both share-intent and drag-drop sources go via initialFileSources —
+        // they are already FileSource objects with zero-copy stream factories.
+        initialFileSources: [...sharedSources, ...droppedSources],
       ),
     );
   }
 
-  void _openFile(String path) {
-    if (Platform.isWindows) {
-      Process.run('explorer', [path]);
-    } else if (Platform.isMacOS) {
-      Process.run('open', [path]);
-    } else if (Platform.isLinux) {
-      Process.run('xdg-open', [path]);
-    } else {
-      OpenFilex.open(path);
-    }
-  }
 }
 
 // ── Accept / Reject dialog ────────────────────────────────────────────────────
@@ -685,13 +924,14 @@ class _PillTabLabel extends StatelessWidget {
 // ── Device tile ───────────────────────────────────────────────────────────────
 class _DeviceTile extends StatelessWidget {
   final String name;
-  final String ip;
+  /// Short session code derived from IP, e.g. "#283".
+  final String code;
   final String platform;
   final VoidCallback? onTap;
 
   const _DeviceTile({
     required this.name,
-    required this.ip,
+    required this.code,
     this.platform = '',
     this.onTap,
   });
@@ -728,12 +968,21 @@ class _DeviceTile extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            Text(
-              ip,
-              style: TextStyle(
-                color: AppTheme.mutedOf(context),
-                fontSize: 11,
-                fontFamily: 'monospace',
+            // Show short session code instead of raw IP
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: AppTheme.accentPrimary.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                code,
+                style: const TextStyle(
+                  color: AppTheme.accentPrimary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  fontFamily: 'monospace',
+                ),
               ),
             ),
             const SizedBox(width: 8),
@@ -750,22 +999,45 @@ class _DeviceTile extends StatelessWidget {
 class _ReceivePlaceholder extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    Widget lottie = Lottie.asset(
+      'assets/animations/Loader cat.json',
+      width: 320,
+      height: 229,
+      fit: BoxFit.contain,
+      repeat: true,
+      // Only hide shadows in dark mode (opacity = 0)
+      delegates: isDark
+          ? LottieDelegates(
+              values: [
+                ValueDelegate.opacity(['Ombre', '**'], value: 0),
+                ValueDelegate.opacity(['Queue Ombre', '**'], value: 0),
+              ],
+            )
+          : null,
+    );
+
+    // In dark mode, boost brightness so the dark-navy cat is visible
+    if (isDark) {
+      lottie = ColorFiltered(
+        colorFilter: const ColorFilter.matrix([
+          // Multiply RGB channels by ~2.5× — dark navy becomes medium blue
+          2.5, 0,   0,   0, 0,
+          0,   2.5, 0,   0, 0,
+          0,   0,   2.5, 0, 0,
+          0,   0,   0,   1, 0,
+        ]),
+        child: lottie,
+      );
+    }
+
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 72,
-            height: 72,
-            decoration: BoxDecoration(
-              color: AppTheme.surfaceOf(context),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: AppTheme.borderOf(context)),
-            ),
-            child: Icon(Icons.download_rounded,
-                size: 32, color: AppTheme.mutedOf(context)),
-          ),
-          const SizedBox(height: 16),
+          lottie,
+          const SizedBox(height: 8),
           Text('Waiting for files…',
               style: TextStyle(
                   color: AppTheme.secondaryOf(context), fontSize: 14)),

@@ -89,13 +89,13 @@ BEGIN
     BEGIN
         BLOCK "040904e4"
         BEGIN
-            VALUE "CompanyName", "com.tcpshare" "\0"
-            VALUE "FileDescription", "tcp_file_share" "\0"
+            VALUE "CompanyName", "Ayush Sonewane" "\0"
+            VALUE "FileDescription", "LocalShare - Fast and Secure File Sharing" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "tcp_file_share" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2026 com.tcpshare. All rights reserved." "\0"
-            VALUE "OriginalFilename", "tcp_file_share.exe" "\0"
-            VALUE "ProductName", "tcp_file_share" "\0"
+            VALUE "InternalName", "LocalShare" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 Ayush Sonewane. All rights reserved." "\0"
+            VALUE "OriginalFilename", "LocalShare.exe" "\0"
+            VALUE "ProductName", "LocalShare" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END

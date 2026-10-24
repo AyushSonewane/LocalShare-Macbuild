@@ -43,3 +43,14 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Local analysis/debug artifacts
+analyze*.txt
+flutter_*.log
+
+# Android signing and key material
+android/key.properties
+*.jks
+*.jks.old
+*.keystore
+*.p12
