@@ -86,6 +86,9 @@ ios/.last_build_id
 # ── Android Platform ─────────────────────────────────────────────────────────
 .gradle/
 **/.gradle/
+android/gradle/
+!android/gradle/wrapper/
+!android/gradle/wrapper/gradle-wrapper.properties
 android/local.properties
 android/app/debug/
 android/app/profile/
