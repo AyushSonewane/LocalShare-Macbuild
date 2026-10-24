@@ -1,56 +1,145 @@
-# Miscellaneous
-*.class
-*.log
-*.pyc
-*.swp
-.DS_Store
-.atom/
-.build/
-.buildlog/
-.history
-.svn/
-.swiftpm/
-migrate_working_dir/
+# ─────────────────────────────────────────────────────────────────────────────
+# LocalShare — .gitignore
+# ─────────────────────────────────────────────────────────────────────────────
 
-# IntelliJ related
+# ── Operating System Files ──────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+[Dd]esktop.ini
+
+# ── Editors & IDEs ──────────────────────────────────────────────────────────
+# Visual Studio Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# IntelliJ / Android Studio
 *.iml
 *.ipr
 *.iws
 .idea/
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
-
-# Flutter/Dart/Pub related
-**/doc/api/
-**/ios/Flutter/.last_build_id
-.dart_tool/
-.flutter-plugins-dependencies
-.pub-cache/
-.pub/
-/build/
-/coverage/
-
-# Symbolication related
-app.*.symbols
-
-# Obfuscation related
-app.*.map.json
-
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
-
-# Local analysis/debug artifacts
+# ── General Temporary & Log Files ───────────────────────────────────────────
+*.log
+*.class
+*.pyc
+*.swp
+*.bak
+*~
+.history
+.atom/
+.buildlog/
+migrate_working_dir/
 analyze*.txt
 flutter_*.log
 
-# Android signing and key material
+# ── Flutter / Dart Core ──────────────────────────────────────────────────────
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+**/doc/api/
+/coverage/
+
+# Build artifacts (root, android, windows, macos)
+build/
+**/build/
+android/app/build/
+android/build/
+
+# Obfuscation & Symbolication
+app.*.symbols
+app.*.map.json
+
+# ── macOS Platform ──────────────────────────────────────────────────────────
+macos/Flutter/ephemeral/
+macos/Flutter/GeneratedPluginRegistrant.swift
+**/Pods/
+**/.symlinks/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+DerivedData/
+*.hmap
+*.xccheckout
+
+# ── iOS Platform ─────────────────────────────────────────────────────────────
+ios/Flutter/ephemeral/
+ios/Flutter/GeneratedPluginRegistrant.h
+ios/Flutter/GeneratedPluginRegistrant.m
+ios/Flutter/GeneratedPluginRegistrant.swift
+ios/Flutter/app.framework
+ios/Flutter/Flutter.framework
+ios/Flutter/Flutter.podspec
+ios/Flutter/Generated.xcconfig
+ios/Flutter/flutter_export_environment.sh
+ios/.last_build_id
+
+# ── Android Platform ─────────────────────────────────────────────────────────
+.gradle/
+**/.gradle/
+android/local.properties
+android/app/debug/
+android/app/profile/
+android/app/release/
+android/app/intermediates/
+android/captures/
+.cxx/
+**/GeneratedPluginRegistrant.java
+
+# Android Security & Signing Keys (NEVER COMMIT)
 android/key.properties
+android/change_password.ps1
+*.ps1
 *.jks
 *.jks.old
 *.keystore
 *.p12
+*.key
+*.pem
+*.cer
+*.crt
+*.mobileprovision
+
+# ── Windows Platform ─────────────────────────────────────────────────────────
+windows/flutter/ephemeral/
+windows/flutter/generated_plugin_registrant.cc
+windows/flutter/generated_plugin_registrant.h
+windows/flutter/generated_plugins.cmake
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+x64/
+x86/
+*.[Cc]ache
+!*.[Cc]ache/
+
+# ── Package Distributions & Compiled Binaries ───────────────────────────────
+# Keep installer scripts (e.g. InnoSetup .iss), but ignore heavy compiled binaries
+installers/*.exe
+installers/*.msix
+installers/*.dmg
+installers/*.zip
+installers/*.apk
+installers/*.appx
+*.dmg
+*.exe
+*.msix
+*.apk
+*.aab
+*.ipa
+
+# ── Secrets, Credentials & Local Env ─────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.local

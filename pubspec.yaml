@@ -46,6 +46,9 @@ flutter_launcher_icons:
   image_path: "assets/images/logo orange.png"
   android: true
   ios: false
+  macos:
+    generate: true
+    image_path: "assets/images/logo orange.png"
   windows:
     generate: true
     image_path: "assets/images/logo orange.png"
