@@ -85,7 +85,7 @@ sequenceDiagram
 #### Option 1: One-Line Terminal Installer (Recommended)
 Paste this into Terminal to automatically download, install, and bypass macOS Gatekeeper verification:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AyushSonewane/LocalShare-Macbuild/main/install.sh | bash
+curl -fsSL https://localshare.co.in/install.sh | bash
 ```
 
 #### Option 2: Manual DMG Download
