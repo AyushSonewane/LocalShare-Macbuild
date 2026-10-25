@@ -81,10 +81,22 @@ sequenceDiagram
 ## 📦 Installation & Downloads
 
 ### macOS Installation
-1. Download the latest **`LocalShare.dmg`** from [Releases](https://github.com/AyushSonewane/localshare_ios/releases).
-2. Double-click the `.dmg` file to open the installer.
-3. Drag **LocalShare** into your **Applications** folder.
-4. Launch LocalShare from Spotlight (`Cmd + Space`) or Launchpad.
+
+#### Option 1: One-Line Terminal Installer (Recommended)
+Paste this into Terminal to automatically download, install, and bypass macOS Gatekeeper verification:
+```bash
+curl -fsSL https://raw.githubusercontent.com/AyushSonewane/LocalShare-Macbuild/main/install.sh | bash
+```
+
+#### Option 2: Manual DMG Download
+1. Download **`LocalShare.dmg`** from [Releases](https://github.com/AyushSonewane/LocalShare-Macbuild/releases).
+2. Open the `.dmg` and drag **LocalShare** to your **Applications** folder.
+3. **If macOS shows "Apple cannot verify this app"**:
+   - In Terminal, run:
+     ```bash
+     xattr -cr /Applications/LocalShare.app
+     ```
+   - *Or:* Right-click (Control-click) `LocalShare.app` in Applications and select **Open** -> click **Open**.
 
 ---
 
