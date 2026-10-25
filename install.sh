@@ -10,7 +10,7 @@ set -e
 # Configuration
 REPO="AyushSonewane/LocalShare-Releases"
 FALLBACK_REPO="AyushSonewane/LocalShare-Macbuild"
-DMG_URL="${CUSTOM_DMG_URL:-https://github.com/${REPO}/releases/download/v1.0.1.0/LocalShare.dmg}"
+DMG_URL="${CUSTOM_DMG_URL:-https://raw.githubusercontent.com/${REPO}/main/LocalShare_v1.0.1.0.dmg}"
 FALLBACK_DMG_URL="https://github.com/${FALLBACK_REPO}/releases/latest/download/LocalShare.dmg"
 APP_NAME="LocalShare.app"
 DEST_DIR="/Applications"
