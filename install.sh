@@ -8,8 +8,10 @@
 set -e
 
 # Configuration
-REPO="AyushSonewane/LocalShare-Macbuild"
-DMG_URL="${CUSTOM_DMG_URL:-https://github.com/${REPO}/releases/latest/download/LocalShare.dmg}"
+REPO="AyushSonewane/LocalShare-Releases"
+FALLBACK_REPO="AyushSonewane/LocalShare-Macbuild"
+DMG_URL="${CUSTOM_DMG_URL:-https://github.com/${REPO}/releases/download/v1.0.1.0/LocalShare.dmg}"
+FALLBACK_DMG_URL="https://github.com/${FALLBACK_REPO}/releases/latest/download/LocalShare.dmg"
 APP_NAME="LocalShare.app"
 DEST_DIR="/Applications"
 TMP_DIR="$(mktemp -d /tmp/localshare-install.XXXXXX)"
@@ -45,15 +47,17 @@ if pgrep -x "LocalShare" >/dev/null 2>&1; then
 fi
 
 # 2. Download DMG
-echo -e "${CYAN}⬇ Downloading LocalShare from:${NC}"
-echo "  ${DMG_URL}"
-echo ""
+echo -e "${CYAN}⬇ Downloading LocalShare...${NC}"
 
 if ! curl -fL --progress-bar -o "${TMP_DMG}" "${DMG_URL}"; then
-    echo ""
-    echo -e "${RED}❌ Failed to download LocalShare.dmg.${NC}"
-    echo "  Please verify the release URL: ${DMG_URL}"
-    exit 1
+    echo -e "${YELLOW}Retrying from fallback mirror...${NC}"
+    if ! curl -fL --progress-bar -o "${TMP_DMG}" "${FALLBACK_DMG_URL}"; then
+        echo ""
+        echo -e "${RED}❌ Failed to download LocalShare.dmg.${NC}"
+        echo "  Please check your connection or download directly from:"
+        echo "  https://github.com/AyushSonewane/LocalShare-Releases/releases"
+        exit 1
+    fi
 fi
 
 # 3. Mount DMG
